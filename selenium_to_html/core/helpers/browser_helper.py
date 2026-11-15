@@ -105,7 +105,7 @@ def _get_page_state(driver: Any, cfg: FetchConfig) -> dict[str, Any]:
             value = func()
             return value if value else default
         except Exception as exc:
-            logger.debug(f"Call to {f} failed: %r", exc)
+            logger.debug(f"Call to {func.__name__} failed: %r", exc)
             return default
 
     page_url = _get_or_default(lambda: driver.current_url, "")
