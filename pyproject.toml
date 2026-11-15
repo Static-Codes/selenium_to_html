@@ -32,26 +32,3 @@ test = [
 # The name of the root package directory.
 [tool.flit.module]
 name = "selenium_to_html"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-norecursedirs = [
-    ".*",
-    "build",
-    "dist",
-    "CVS",
-    "_darcs",
-    "{arch}",
-    "*.egg",
-    "venv",
-    "node_modules",
-    "__pycache__",
-]
-markers = [
-    "integration: real-browser end-to-end tests against local fixtures",
-    "chrome: requires Chrome/Chromium and chromedriver",
-    "firefox: requires Firefox and geckodriver",
-    "safari: requires macOS with safaridriver enabled",
-]
