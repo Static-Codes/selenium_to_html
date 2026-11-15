@@ -84,6 +84,7 @@ def _get_mime_type(res: ResourceResult) -> str:
         )
         
         mime_type = guessed_type or mime_type or "application/octet-stream"
+    return mime_type
 
 def _res_to_data_uri(res: ResourceResult) -> str:
     return f"data:{_get_mime_type(res)};base64,{base64.b64encode(res.body).decode('ascii')}"

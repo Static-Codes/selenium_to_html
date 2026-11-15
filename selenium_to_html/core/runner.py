@@ -184,8 +184,8 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
         driver=driver,
         cfg=cfg,
         page_url=page_url or base_url,
-        user_agent=state["user_agent"],
-        cookies=state["cookies"],
+        user_agent=thread_state["user_agent"],
+        cookies=thread_state["cookies"],
         opener=opener,
         driver_lock=asyncio.Lock(),
     )
