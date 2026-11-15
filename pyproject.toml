@@ -5,7 +5,7 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "selenium_to_html"
 version = "0.1.0"
-description = "Hardened Selenium page_source capture with concurrent, multi-approach fetching of linked resources and optional base64 media embedding."
+description = "Hardened extension of Selenium's page_source. Supports synchronous and asynchronous captures with a concurrent, layered-approach to the fetching of linked resources. Includes optional media embedding support."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -21,12 +21,6 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Framework :: AsyncIO",
     "Topic :: Internet :: WWW/HTTP",
-]
-
-[project.optional-dependencies]
-test = [
-    "pytest>=8",
-    "pytest-asyncio>=0.23",
 ]
 
 # The name of the root package directory.
