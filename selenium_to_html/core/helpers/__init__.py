@@ -1,0 +1,1 @@
+"""Helper functions for browser, network, and resource handling."""

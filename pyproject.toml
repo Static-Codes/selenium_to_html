@@ -1,0 +1,57 @@
+[build-system]
+requires = ["flit_core>=3.9,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "selenium_to_html"
+version = "0.1.0"
+description = "Hardened Selenium page_source capture with concurrent, multi-approach fetching of linked resources and optional base64 media embedding."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "selenium>=4.0",
+]
+keywords = ["selenium_python", "hardened_selenium", "scraping", "selenium_extensions", "selenium_python3"]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: AsyncIO",
+    "Topic :: Internet :: WWW/HTTP",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+# The name of the root package directory.
+[tool.flit.module]
+name = "selenium_to_html"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+norecursedirs = [
+    ".*",
+    "build",
+    "dist",
+    "CVS",
+    "_darcs",
+    "{arch}",
+    "*.egg",
+    "venv",
+    "node_modules",
+    "__pycache__",
+]
+markers = [
+    "integration: real-browser end-to-end tests against local fixtures",
+    "chrome: requires Chrome/Chromium and chromedriver",
+    "firefox: requires Firefox and geckodriver",
+    "safari: requires macOS with safaridriver enabled",
+]
