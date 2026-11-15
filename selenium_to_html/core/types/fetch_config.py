@@ -36,7 +36,7 @@ class FetchConfig:
     redirect_statuses: frozenset[int] = frozenset({302})
 
     # Statuses that indicate a fatal failure.
-    terminal_statuses: frozenset[int] = frozenset({404, 410})
+    fatal_statuses: frozenset[int] = frozenset({404, 410})
     
     # Statuses that indicate another attempt should be made for this approach.
     retryable_statuses: frozenset[int] = frozenset({408, 425, 429, 500, 502, 503, 504})
@@ -60,7 +60,7 @@ class FetchConfig:
     verify_tls: bool = True
 
     # The max number of 
-    max_bytes: int = 25 * 1024 * 1024
+    max_resource_bytes: int = 25 * 1024 * 1024
 
     # The number of seconds selenium_to_html should wait for until throwing a TimeoutException.
     page_ready_timeout: float = 15.0

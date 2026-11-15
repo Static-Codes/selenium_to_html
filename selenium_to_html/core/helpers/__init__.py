@@ -1,1 +1,1 @@
-"""Helper functions for browser, network, and resource handling."""
+"""This module defines directory helper functions for browser, network, and resource handling."""

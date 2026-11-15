@@ -1,4 +1,11 @@
-"""HTML parser that discovers externally linked resources."""
+"""
+
+This file contains the ResourceParser implementation which overrides html.parser.HTMLParser.
+
+ResourceParser dynamically resolves tag tokens defined in MEDIA_TAG_TOKENS and extracts located resources.
+
+Notably, it does NOT handle the optional media embedding; that is handled in resource_helper.embed_media.
+"""
 
 from __future__ import annotations
 

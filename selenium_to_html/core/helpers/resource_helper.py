@@ -1,4 +1,6 @@
-"""Resource discovery (HTML -> refs) and media embedding (refs -> data: URIs)."""
+"""
+This file contains helper functions for selenium_to_html's resource discovery/extraction and media embedding operations.
+""" 
 
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ _SKIP_SCHEMES = ("data:", "javascript:", "blob:", "about:", "mailto:", "tel:")
 _SRC_ATTR_RE = re.compile(r"""(\ssrc\s*=\s*)("[^"]*"|'[^']*'|[^\s"'>]+)""", re.IGNORECASE)
 
 
-def _extract_refs(
+def _extract_references(
     html: str,
     base_url: str,
     page_url: str,
@@ -69,44 +71,61 @@ def _extract_refs(
     return list(seen.values())
 
 
-def _data_uri(res: ResourceResult) -> str:
-    mime = res.content_type.split(";")[0].strip().lower()
-    if not mime or mime == "application/octet-stream":
-        guessed, _ = mimetypes.guess_type(urlsplit(res.final_url or res.ref.url).path)
-        mime = guessed or mime or "application/octet-stream"
-    return f"data:{mime};base64,{base64.b64encode(res.body).decode('ascii')}"
-
-
-def _embed_media(
-    html: str, results: list[ResourceResult], cfg: FetchConfig
-) -> tuple[str, int]:
+def _get_mime_type(res: ResourceResult) -> str:
     """
-    Return (html, count) with the src attribute of every successfully fetched
-    media tag replaced by a base64 data: URI. Failed or oversized resources
-    are left pointing at their original URL.
+    Attempts to resolve the mime type for the provided ResourceResult.
+    Returns "application/octet-stream" as a fallback if resolution fails.
     """
-    out = html
-    embedded = 0
-    done: set[str] = set()
+    mime_type = res.content_type.split(";")[0].strip().lower()
+    
+    if not mime_type or mime_type == "application/octet-stream":
+        guessed_type, path = mimetypes.guess_type(
+            urlsplit(res.final_url or res.ref.url).path
+        )
+        
+        mime_type = guessed_type or mime_type or "application/octet-stream"
 
-    for res in results:
-        if res.ref.kind != "media" or not res.ok or not res.body:
-            continue
-        if len(res.body) > cfg.embed_max_bytes:
-            logger.warning("Not embedding %s: %d bytes exceeds embed_max_bytes",
-                           res.ref.url, len(res.body))
+def _res_to_data_uri(res: ResourceResult) -> str:
+    return f"data:{_get_mime_type(res)};base64,{base64.b64encode(res.body).decode('ascii')}"
+
+
+def _embed_media(html: str, results: list[ResourceResult], cfg: FetchConfig) -> tuple[str, int]:
+    """
+    Returns a tuple (html: str, count: int) where "html" contains the modified page source, with each resolved "src" attribute replaced with it's base64 data: URI representation.
+
+    Note: 
+    Attributes are not replaced in if:
+    - A fetch operation for a given resource operation fails
+    - The desired resource's size exceeds "cfg.max_resource_bytes".
+    """
+    output = html
+    number_of_embedded_attributes = 0
+    embedded_attributes: set[str] = set()
+
+    for result in results:
+        if result.ref.kind != "media" or not result.ok or not result.body:
             continue
 
-        uri = _data_uri(res)
-        for tag_text in res.ref.tag_texts:
-            if tag_text in done:
+        if len(result.body) > cfg.embed_max_bytes:
+            logger.warning("Not embedding %s: %d bytes exceeds embed_max_bytes", result.ref.url, len(result.body))
+            continue
+
+        uri = _res_to_data_uri(result)
+        for tag_text in result.ref.tag_texts:
+            
+            if tag_text in embedded_attributes:
                 continue
-            done.add(tag_text)
-            # Callable replacement avoids backslash/group-escape surprises.
-            new_tag, n = _SRC_ATTR_RE.subn(
-                lambda m, u=uri: f'{m.group(1)}"{u}"', tag_text, count=1)
-            if n:
-                out = out.replace(tag_text, new_tag)
-                embedded += 1
 
-    return out, embedded
+            embedded_attributes.add(tag_text)
+
+            # Escaping/sanitizing tags to avoid backslashes.
+            # The lambda expression isn't necessary, but it helpful for formatting purposes.
+            new_tag, number_of_replacements = _SRC_ATTR_RE.subn(
+                lambda match, uri=uri: f'{match.group(1)}"{uri}"', tag_text, count=1
+            )
+
+            if number_of_replacements:
+                output = output.replace(tag_text, new_tag)
+                number_of_embedded_attributes += 1
+
+    return output, number_of_embedded_attributes

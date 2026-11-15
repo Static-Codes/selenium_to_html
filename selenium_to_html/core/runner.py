@@ -1,4 +1,4 @@
-"""Async orchestration: per-resource fallback state machine and public entry points."""
+"""This file contains the core runner logic for selenium_to_html; It supports both asynchronous and synchronous operations."""
 
 from __future__ import annotations
 
@@ -17,9 +17,9 @@ from .helpers.browser_helper import (
     _get_page_state,
     _http_get,
 )
-from .helpers.resource_helper import _embed_media, _extract_refs
+from .helpers.resource_helper import _embed_media, _extract_references
 from .types.fetch_config import FetchConfig, ResourceRef
-from .types.internal import _AttemptError, _Context, _Fetched, _NoRedirect
+from .types.internal_types import _AttemptError, _Context, _Fetched, _NoRedirect
 from .types.result_types import FetchAttempt, PageSnapshot, ResourceResult
 
 logger = logging.getLogger("selenium_to_html.runner")
@@ -33,6 +33,7 @@ _APPROACHES: tuple[str, ...] = (
 
 
 async def _try_approach(approach: str, url: str, ctx: _Context) -> _Fetched:
+    """Attempts to fetch the resource from url in the context "ctx" using approach."""
 
     # Selenium drivers are not thread-safe, the following serializes all driver access.
     if approach == "browser_fetch":
@@ -67,6 +68,7 @@ def _standby_idle(cfg: FetchConfig, attempt: int) -> float:
 
 
 async def _fetch_resource(ref: ResourceRef, ctx: _Context, semaphore: asyncio.Semaphore) -> ResourceResult:
+    """Using the provided context and semaphore, an asynchronous attempt is made to fetch the requested ResourceRef."""
     cfg = ctx.cfg
     result = ResourceResult(ref=ref, ok=False)
 
@@ -78,7 +80,7 @@ async def _fetch_resource(ref: ResourceRef, ctx: _Context, semaphore: asyncio.Se
                 continue
 
             for attempt in range(1, cfg.attempts_per_approach + 1):
-                t0 = time.perf_counter()
+                start_time = time.perf_counter()
                 try:
                     fetched = await _try_approach(approach, ref.url, ctx)
                 
@@ -87,9 +89,12 @@ async def _fetch_resource(ref: ResourceRef, ctx: _Context, semaphore: asyncio.Se
                 
                 except _AttemptError as exc:
                     err = exc
-                except Exception as exc:  # defensive: never let one resource kill the batch
+
+                except Exception as exc:  # Ensuring a single failed resource fetch doesn't kill a batch operation.
                     err = _AttemptError(None, f"unexpected error: {exc!r}", retryable=False)
                 
+                # This else conditional serve as a guard clause.
+                # If an attempt to fetch the provided resource throws an exception, the following is NOT executed.
                 else:
                     result.attempts.append(
                         FetchAttempt(
@@ -100,7 +105,7 @@ async def _fetch_resource(ref: ResourceRef, ctx: _Context, semaphore: asyncio.Se
                             fetched.final_url,
                             fetched.redirects, 
                             None, 
-                            time.perf_counter() - t0
+                            time.perf_counter() - start_time
                         )
                     )
 
@@ -112,60 +117,68 @@ async def _fetch_resource(ref: ResourceRef, ctx: _Context, semaphore: asyncio.Se
                     result.approach = approach
 
                     if attempt > 1 or approach != _APPROACHES[0]:
-                        logger.info("Recovered %s via %s (attempt %d)", ref.url, approach, attempt)
+                        logger.info("Retrieved %s via %s (attempt %d in fallback mode)", ref.url, approach, attempt)
+
                     return result
 
-                elapsed = time.perf_counter() - t0
-                result.attempts.append(FetchAttempt(
-                    approach, attempt, False, err.status, None,
-                    err.redirects, str(err), elapsed))
+                elapsed = time.perf_counter() - start_time
+                result.attempts.append(
+                    FetchAttempt(
+                        approach, attempt, False, err.status, None, err.redirects, str(err), elapsed
+                    )
+                )
+
                 logger.warning(
-                    "Fetch failure url=%s approach=%s attempt=%d/%d status=%s error=%s",
-                    ref.url, approach, attempt, cfg.attempts_per_approach,
-                    err.status, err)
+                    "Fetch failure | url=%s | approach=%s | attempt=%d/%d | status=%s | error=%s",
+                    ref.url, approach, attempt, cfg.attempts_per_approach, err.status, err
+                )
 
-                if err.status in cfg.terminal_statuses:
+                if err.status in cfg.fatal_statuses:
                     result.status = err.status
-                    logger.error("Resource failed (terminal status %s): %s",
-                                 err.status, ref.url)
+                    logger.error("Resource failed with status %s: %s", err.status, ref.url)
                     return result
+
                 if not err.retryable:
                     break
+                
                 if attempt < cfg.attempts_per_approach:
                     await asyncio.sleep(_standby_idle(cfg, attempt))
 
     last = result.attempts[-1] if result.attempts else None
     result.status = last.status if last else None
-    logger.error("Resource failed after %d attempt(s) across all approaches: %s",
-                 len(result.attempts), ref.url)
+    logger.error("Failed to fetch resource after %d attempt(s) from: %s", len(result.attempts), ref.url)
+
     return result
 
 
 async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSnapshot:
     """
-    Capture the driver's current page: rendered source plus all linked resources.
+    Asynchronously captures the rendered page source for the active tab in the provided driver.
+    
+    The provided driver must not be accessed by another thread for the duration of this operation.
 
-    The driver must already be on the target page. Do not use the driver from
-    other threads while this coroutine is running.
+    For thread-safe requests, opt for capture_page_sync in an asyncio event loop.
     """
+
     cfg = config or FetchConfig()
     started = time.perf_counter()
 
-    state = await asyncio.to_thread(_get_page_state, driver, cfg)
-    source: str = state["source"]
-    page_url: str = state["page_url"]
-    browser_base: str = state["browser_base"]
+    thread_state = await asyncio.to_thread(_get_page_state, driver, cfg)
+    source: str = thread_state["source"]
+    page_url: str = thread_state["page_url"]
+    browser_base: str = thread_state["browser_base"]
     base_url = browser_base or page_url
 
-    refs = _extract_refs(source, base_url, page_url or base_url, cfg, bool(browser_base))
+    refs = _extract_references(source, base_url, page_url or base_url, cfg, bool(browser_base))
     logger.info("Discovered %d unique external resource(s) on %s", len(refs), page_url)
 
     ssl_ctx = ssl.create_default_context()
+
     if not cfg.verify_tls:
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
-    opener = urllib.request.build_opener(
-        _NoRedirect, urllib.request.HTTPSHandler(context=ssl_ctx))
+
+    opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=ssl_ctx))
 
     ctx = _Context(
         driver=driver,
@@ -177,30 +190,36 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
         driver_lock=asyncio.Lock(),
     )
 
-    sem = asyncio.Semaphore(max(1, cfg.max_concurrency))
+    semaphore = asyncio.Semaphore(max(1, cfg.max_concurrency))
+
     outcomes = await asyncio.gather(
-        *(_fetch_resource(r, ctx, sem) for r in refs),
+        *(_fetch_resource(ref, ctx, semaphore) for ref in refs),
         return_exceptions=True,
     )
 
     results: list[ResourceResult] = []
     for ref, outcome in zip(refs, outcomes):
-        if isinstance(outcome, BaseException):
-            logger.error("Unhandled error fetching %s: %r", ref.url, outcome)
-            results.append(ResourceResult(ref=ref, ok=False, attempts=[
-                FetchAttempt("internal", 1, False, None, None, (), repr(outcome), 0.0)]))
-        else:
+        
+        if not isinstance(outcome, BaseException):
             results.append(outcome)
-
+        
+        else:
+            logger.error("Unhandled error fetching %s: %r", ref.url, outcome)
+            results.append(
+                ResourceResult(ref=ref, ok=False, attempts=[
+                    FetchAttempt("internal_types", 1, False, None, None, (), repr(outcome), 0.0)
+                ])
+            )
+        
     embedded_source: str | None = None
     embedded_count = 0
+
     if cfg.embed_media:
         try:
-            embedded_source, embedded_count = await asyncio.to_thread(
-                _embed_media, source, results, cfg)
-            logger.info("Embedded %d media tag(s) as data: URIs", embedded_count)
+            embedded_source, embedded_count = await asyncio.to_thread(_embed_media, source, results, cfg)
+            logger.info("Embedded %d media tag(s) as base64 'data:' URIs", embedded_count)
         except Exception:
-            logger.exception("Media embedding failed; embedded_source left unset")
+            logger.exception("Media embedding failed because 'embedded_source' was not set")
 
     snapshot = PageSnapshot(
         page_url=page_url,
@@ -211,15 +230,20 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
         embedded_source=embedded_source,
         embedded_count=embedded_count,
     )
-    logger.info("Capture complete: %d ok, %d failed, %.2fs",
-                len(snapshot.succeeded), len(snapshot.failures), snapshot.elapsed)
+    
+    logger.info(
+        "Capture complete:\n\nResults:\n%d succeeded | %d failed | Time spent: %.2fs", 
+        len(snapshot.succeeded), len(snapshot.failures), snapshot.elapsed
+    )
+
     return snapshot
 
 
 def capture_page_sync(driver: Any, config: FetchConfig | None = None) -> PageSnapshot:
     """
-    Blocking wrapper. Safe to call whether or not an event loop is already
-    running in the calling thread (e.g. when hosted inside another runtime).
+    Synchronously captures the rendered page source for the active tab in the provided driver.
+    
+    Unlike capture_page (which is non-blocking), executing in a synchronous context makes this operation thread-safe.
     """
     try:
         asyncio.get_running_loop()

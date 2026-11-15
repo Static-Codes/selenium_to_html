@@ -16,7 +16,7 @@ from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 from ..types.fetch_config import FetchConfig
-from ..types.internal import _AttemptError, _Context, _Fetched
+from ..types.internal_types import _AttemptError, _Context, _Fetched
 
 logger = logging.getLogger("selenium_to_html.browser_helper")
 
@@ -140,8 +140,8 @@ def _block_browser_fetch(driver: Any, url: str, cfg: FetchConfig) -> _Fetched:
             retryable=status in cfg.retryable_statuses, redirects=number_of_redirects,
         )
     body = base64.b64decode(result.get("body") or "")
-    if len(body) > cfg.max_bytes:
-        raise _AttemptError(status, "response exceeds max_bytes", retryable=False)
+    if len(body) > cfg.max_resource_bytes:
+        raise _AttemptError(status, "response exceeds max_resource_bytes", retryable=False)
     return _Fetched(status, final_url, body, result.get("type") or "", number_of_redirects)
 
 
@@ -245,8 +245,8 @@ def _http_get(url: str, headers: dict[str, str], cfg: FetchConfig,
                     if not chunk:
                         break
                     total += len(chunk)
-                    if total > cfg.max_bytes:
-                        raise _AttemptError(status, "response exceeds max_bytes",
+                    if total > cfg.max_resource_bytes:
+                        raise _AttemptError(status, "response exceeds max_resource_bytes",
                                             retryable=False, redirects=tuple(number_of_redirects))
                     chunks.append(chunk)
                 body = _decode_body(b"".join(chunks),

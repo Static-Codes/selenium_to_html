@@ -108,40 +108,40 @@ print(snapshot.embedded_count)
 
 ## FetchConfig API
 
-The following are the parameter names and associated types supported by the `FetchConfig` constructor. For more information, please reference the [source](./selenium_to_html/core/types/fetch_config.py#L9-L73) comments.
+The following are the names, types and default values for the parameters supported by the `FetchConfig` constructor. For more information, please reference the [source](./selenium_to_html/core/types/fetch_config.py#L9-L73) comments.
 
 - Concurrency and timing: 
-    - `max_concurrency`: `int` 
-    - `request_timeout`: `float` 
-    - `total_timeout`: `float`
-    - `attempts_per_approach`: `int`
-    - `standby_idle_base`: `float`
-    - `standby_idle_max`: `float`
+    - `max_concurrency`: `int` = `8`
+    - `request_timeout`: `float` = `15.0`
+    - `total_timeout`: `float` = `60.0`
+    - `attempts_per_approach`: `int` = `2`
+    - `standby_idle_base`: `float` = `0.5`
+    - `standby_idle_max`: `float` = `8.0`
 
 - Status policy: 
-    - `max_redirects`: `int`
-    - `success_statuses`: `frozenset[int]` 
-    - `redirect_statuses`: `frozenset[int]` 
-    - `terminal_statuses`: `frozenset[int]` 
-    - `retryable_statuses`: `frozenset[int]`
+    - `max_redirects`: `int` = `5`
+    - `success_statuses`: `frozenset[int]` = `frozenset({200})`
+    - `redirect_statuses`: `frozenset[int]` = `frozenset({302})`
+    - `fatal_statuses`: `frozenset[int]` = `frozenset({404, 410})`
+    - `retryable_statuses`: `frozenset[int]` = `frozenset({408, 425, 429, 500, 502, 503, 504})`
 
 - Scope: 
-    - `same_origin_only`: `bool`
-    - `include_media`: `bool`
+    - `same_origin_only`: `bool` = `False`
+    - `include_media`: `bool` = `False`
 
 - Embedding: 
-    - `embed_media`: `bool`
-    - `embed_max_bytes`: `int` (per-resource cap, defaults to 2 MiB)
+    - `embed_media`: `bool` = `False`
+    - `embed_max_bytes`: `int` = `2097152` (per-resource cap, defaults to 2 MiB)
 
 - Safety: 
-    - `use_browser_fallback`: `bool`
-    - `verify_tls`: `bool`
-    - `max_bytes`: `int`
+    - `use_browser_fallback`: `bool` = `True`
+    - `verify_tls`: `bool` = `True`
+    - `max_resource_bytes`: `int` = `26214400` (total resource cap, defaults to 25MiB)
 
 - Page source: 
-    - `page_ready_timeout`: `int`
-    - `page_source_attempts`: `int`
-    - `browser_script_timeout`: `int`
+    - `page_ready_timeout`: `int` = `15.0`
+    - `page_source_attempts`: `int` = `3`
+    - `browser_script_timeout`: `int` = `20.0`
 
 
 ## Fetch approaches

@@ -1,4 +1,4 @@
-"""Result types returned by a capture."""
+"""This file contains result type declarations used during a capture operation."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from .fetch_config import ResourceRef
 
 @dataclass(slots=True)
 class FetchAttempt:
+    """Represents an attempt made to fetch a given resource."""
     approach: str
     attempt: int
     ok: bool
@@ -22,6 +23,7 @@ class FetchAttempt:
 
 @dataclass(slots=True)
 class ResourceResult:
+    """Represents the result of the fetching operations for a given ResourceRef."""
     ref: ResourceRef
     ok: bool
     status: int | None = None
@@ -45,40 +47,42 @@ class ResourceResult:
 
 @dataclass(slots=True)
 class PageSnapshot:
-    page_url: str
-    base_url: str
-    page_source: str
-    resources: list[ResourceResult]
-    elapsed: float
-    embedded_source: str | None = None     # set when embed_media=True
-    embedded_count: int = 0                # media tags rewritten to data: URIs
+    """Represents the captured snapshot of the active page in the provided driver instance."""
+    page_url: str # The active page's full url.
+    base_url: str # The base url from where the resource is served from.
+    page_source: str # The raw page source of the active page.
+    resources: list[ResourceResult] # A collection resolved resources from the raw page source.
+    elapsed: float # The seconds that have elapsed in the current operation.
+    
+    embedded_source: str | None = None # The page's rendered source code; this is set when embed_media is enabled.
+    embedded_count: int = 0 # The number of tags that had their resource embedded as 'data:' URIs.
 
     @property
     def succeeded(self) -> list[ResourceResult]:
-        return [r for r in self.resources if r.ok]
+        return [resource for resource in self.resources if resource.ok]
 
     @property
     def failures(self) -> list[ResourceResult]:
-        return [r for r in self.resources if not r.ok]
+        return [resource for resource in self.resources if not resource.ok]
 
     def failure_report(self) -> list[dict[str, Any]]:
-        """Plain-dict failure log, convenient for serialisation."""
+        """Generates a dictionary containing a log of the events leading up to a fatal failure."""
         return [
             {
-                "url": r.ref.url,
-                "tag": r.ref.tag,
-                "kind": r.ref.kind,
+                "url": failure.ref.url,
+                "tag": failure.ref.tag,
+                "kind": failure.ref.kind,
                 "attempts": [
                     {
-                        "approach": a.approach,
-                        "attempt": a.attempt,
-                        "status": a.status,
-                        "error": a.error,
-                        "redirects": list(a.redirects),
-                        "elapsed": round(a.elapsed, 3),
+                        "approach": attempt.approach,
+                        "attempt": attempt.attempt,
+                        "status": attempt.status,
+                        "error": attempt.error,
+                        "redirects": list(attempt.redirects),
+                        "elapsed": round(attempt.elapsed, 3),
                     }
-                    for a in r.attempts
+                    for attempt in failure.attempts
                 ],
             }
-            for r in self.failures
+            for failure in self.failures
         ]

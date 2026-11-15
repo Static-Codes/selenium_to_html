@@ -1,4 +1,4 @@
-"""Internal helper types shared between the helper modules and the runner."""
+"""This file contains declarations for internal_types helper types shared between the helper modules and the runner."""
 
 from __future__ import annotations
 
