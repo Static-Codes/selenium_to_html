@@ -15,7 +15,7 @@ from .helpers.browser_helper import (
     _block_browser_fetch,
     _build_headers,
     _get_page_state,
-    _http_get,
+    _make_http_get_request,
 )
 from .helpers.resource_helper import _embed_media, _extract_references
 from .types.fetch_config import FetchConfig, ResourceRef
@@ -42,7 +42,7 @@ async def _try_approach(approach: str, url: str, ctx: _Context) -> _Fetched:
     
     # All other requests are already thread-safe, as they are routed through urllib.request.
     headers = _build_headers(approach, ctx, url)
-    return await asyncio.to_thread(_http_get, url, headers, ctx.cfg, ctx.opener)
+    return await asyncio.to_thread(_make_http_get_request, url, headers, ctx.cfg, ctx.opener)
 
 
 def _standby_idle(cfg: FetchConfig, attempt: int) -> float:

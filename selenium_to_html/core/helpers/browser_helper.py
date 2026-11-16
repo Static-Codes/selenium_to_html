@@ -26,9 +26,9 @@ _GENERIC_UA = (
 )
 
 # --------------------------------------------------------------------------- #
-# Selenium-side
+# Selenium related declarations.
 # --------------------------------------------------------------------------- #
-# Source for a client side fetch attempt.
+
 _JS_FETCH = """
 const url = arguments[0];
 const done = arguments[arguments.length - 1];
@@ -37,18 +37,19 @@ fetch(url, {
     redirect: 'follow', 
     cache: 'no-store'
 })
-.then(async r => {
-    const bytes = new Uint8Array(await r.arrayBuffer());
+.then(async req => {
+
+    const bytes = new Uint8Array(await req.arrayBuffer());
     let bin = '';
-    const step = 0x8000;
+    const step = 32768; // 32768
     for (let i = 0; i < bytes.length; i += step) {
       bin += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
     }
     done({
-        status: r.status, 
-        redirected: r.redirected, 
-        url: r.url,
-        type: r.headers.get('content-type') || '', body: btoa(bin)
+        status: req.status, 
+        redirected: req.redirected, 
+        url: req.url,
+        type: req.headers.get('content-type') || '', body: btoa(bin)
     });
 })
 .catch(e => done({error: String(e)}));
@@ -146,7 +147,7 @@ def _block_browser_fetch(driver: Any, url: str, cfg: FetchConfig) -> _Fetched:
 
 
 # --------------------------------------------------------------------------- #
-# urllib-side
+# urllib helper function declarations.
 # --------------------------------------------------------------------------- #
 
 def _cookie_header(ctx: _Context, url: str) -> str:
@@ -154,18 +155,25 @@ def _cookie_header(ctx: _Context, url: str) -> str:
     host = (parts.hostname or "").lower()
     path = parts.path or "/"
     pairs: list[str] = []
-    for c in ctx.cookies:
-        name, value = c.get("name"), c.get("value")
+    
+    for cookie in ctx.cookies:
+        name, value = cookie.get("name"), cookie.get("value")
+        
         if not name or value is None:
             continue
-        domain = (c.get("domain") or "").lstrip(".").lower()
+
+        domain = (cookie.get("domain") or "").lstrip(".").lower()
         if domain and not (host == domain or host.endswith("." + domain)):
             continue
-        if not path.startswith(c.get("path") or "/"):
+        
+        if not path.startswith(cookie.get("path") or "/"):
             continue
-        if c.get("secure") and parts.scheme != "https":
+        
+        if cookie.get("secure") and parts.scheme != "https":
             continue
+        
         pairs.append(f"{name}={value}")
+    
     return "; ".join(pairs)
 
 
@@ -179,17 +187,18 @@ def _build_headers(approach: str, ctx: _Context, url: str) -> dict[str, str]:
             "Referer": ctx.page_url,
         }
         cookie = _cookie_header(ctx, url)
+
         if cookie:
             headers["Cookie"] = cookie
         return headers
 
     if approach == "origin_referer":
-        p = urlsplit(ctx.page_url)
+        parts = urlsplit(ctx.page_url)
         headers = {
             "User-Agent": ctx.user_agent,
             "Accept": "*/*",
             "Accept-Encoding": "gzip, deflate",
-            "Referer": f"{p.scheme}://{p.netloc}/",
+            "Referer": f"{parts.scheme}://{parts.netloc}/",
         }
         cookie = _cookie_header(ctx, url)
         if cookie:
@@ -216,13 +225,16 @@ def _decode_body(raw: bytes, encoding: str) -> bytes:
                 return zlib.decompress(raw)
             except zlib.error:
                 return zlib.decompress(raw, -zlib.MAX_WBITS)
+
     except (OSError, EOFError, zlib.error) as exc:
         raise _AttemptError(None, f"decompression failed ({enc}): {exc!r}") from exc
+
     raise _AttemptError(None, f"unsupported Content-Encoding: {enc}", retryable=False)
 
 
-def _http_get(url: str, headers: dict[str, str], cfg: FetchConfig,
-              opener: urllib.request.OpenerDirector) -> _Fetched:
+def _make_http_get_request(
+    url: str, headers: dict[str, str], cfg: FetchConfig, opener: urllib.request.OpenerDirector
+) -> _Fetched:
     deadline = time.monotonic() + cfg.total_timeout
     current = url
     number_of_redirects: list[str] = []
@@ -233,24 +245,32 @@ def _http_get(url: str, headers: dict[str, str], cfg: FetchConfig,
             with opener.open(req, timeout=cfg.request_timeout) as resp:
                 status = resp.status
                 if status not in cfg.success_statuses:
-                    raise _AttemptError(status, f"HTTP {status}", retryable=False,
-                                        redirects=tuple(number_of_redirects))
+                    raise _AttemptError(
+                        status, f"HTTP {status}", 
+                        retryable=False,
+                        redirects=tuple(number_of_redirects)
+                    )
+                    
                 chunks: list[bytes] = []
                 total = 0
                 while True:
                     if time.monotonic() > deadline:
                         raise _AttemptError(None, "total timeout exceeded",
                                             redirects=tuple(number_of_redirects))
+
                     chunk = resp.read(65536)
                     if not chunk:
                         break
+
                     total += len(chunk)
                     if total > cfg.max_resource_bytes:
                         raise _AttemptError(status, "response exceeds max_resource_bytes",
                                             retryable=False, redirects=tuple(number_of_redirects))
+                    
                     chunks.append(chunk)
                 body = _decode_body(b"".join(chunks),
                                     resp.headers.get("Content-Encoding", ""))
+                
                 return _Fetched(status, current, body,
                                 resp.headers.get("Content-Type", ""), tuple(number_of_redirects))
 
@@ -258,16 +278,20 @@ def _http_get(url: str, headers: dict[str, str], cfg: FetchConfig,
             code = exc.code
             location = exc.headers.get("Location") if exc.headers else None
             exc.close()
+
             if code in cfg.redirect_statuses:
                 if not location:
                     raise _AttemptError(code, "redirect without Location header",
                                         retryable=False, redirects=tuple(number_of_redirects)) from exc
+                
                 current = urljoin(current, location)
                 if urlsplit(current).scheme not in ("http", "https"):
                     raise _AttemptError(code, f"redirect to unsupported scheme: {current}",
                                         retryable=False, redirects=tuple(number_of_redirects)) from exc
+                
                 number_of_redirects.append(current)
                 continue
+            
             raise _AttemptError(code, f"HTTP {code}",
                                 retryable=code in cfg.retryable_statuses,
                                 redirects=tuple(number_of_redirects)) from exc
