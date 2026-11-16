@@ -37,8 +37,8 @@ def _extract_references(
     except Exception:  # HTMLParser is lenient, but never let it sink the run
         logger.exception("HTML parser raised; using partial results")
 
-    # document.baseURI already accounts for <base>; only apply it manually
-    # when we could not get the browser's own value.
+    # document.baseURI already accounts for <base> tags.
+    # Applied manually when a browser's value is irretrievable.
     effective_base = base_url
     if not browser_base and parser.base_href:
         effective_base = urljoin(base_url, parser.base_href)

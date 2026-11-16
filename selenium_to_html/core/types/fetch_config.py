@@ -44,7 +44,7 @@ class FetchConfig:
     # If the request should only fetch resources from the same origin as defined by the 'origin' header.
     same_origin_only: bool = False
     
-    # Handles <img>, <video>, <audio>, <source>, <track>, <embed>
+    # Whether or not media tags (<img>, <video>, <audio>, <source>, <track>, <embed>) should be parsed by ResourceParser.
     include_media: bool = False
 
     # Whether encountered media should be embedded as base64 into the resulting html artifact.
