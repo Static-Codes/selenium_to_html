@@ -1,8 +1,8 @@
 """The following example navigates to google.com using Chrome and asynchronously captures the rendered page source."""
 
+import aiofiles
 import logging
 from selenium_to_html import FetchConfig, capture_page
-
 from selenium.webdriver import Chrome
 
 
@@ -15,8 +15,8 @@ async def main():
     result = await capture_page(driver, FetchConfig(include_media=True, embed_media=True))
     
     # the raw page source can be found at result.page_source
-    with open("chrome-google-async.html", "w") as output:
-        output.write(result.embedded_source)
+    async with aiofiles.open("chrome-google-async.html", "w") as output:
+        await output.write(result.embedded_source)
 
 if __name__ == "__main__":
     import asyncio
