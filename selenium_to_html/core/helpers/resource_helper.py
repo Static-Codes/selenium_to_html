@@ -16,7 +16,7 @@ from ..types.result_types import ResourceResult
 
 logger = logging.getLogger("selenium_to_html.resource_helper")
 
-_SKIP_SCHEMES = ("data:", "javascript:", "blob:", "about:", "mailto:", "tel:")
+ATTRIBUTES_TO_SKIP = ("data:", "javascript:", "blob:", "about:", "mailto:", "tel:")
 
 # Matches 'src=*' inside a raw start tag. 
 # The leading '\s' keeps the patern from matching both 'data-src=*' and 'lazy-src=*'.
@@ -30,13 +30,13 @@ def _extract_references(
     cfg: FetchConfig,
     browser_base: bool,
 ) -> list[ResourceRef]:
-    parser = _ResourceParser(cfg.include_media or cfg.embed_media)
+    parser = _ResourceParser(cfg.include_media or cfg.embed_media, logger=logger)
     try:
         parser.feed(html)
         parser.close()
     except Exception:  # HTMLParser is lenient, but never let it sink the run
         logger.exception("HTML parser raised; using partial results")
-
+        
     # document.baseURI already accounts for <base> tags.
     # Applied manually when a browser's value is irretrievable.
     effective_base = base_url
@@ -44,31 +44,36 @@ def _extract_references(
         effective_base = urljoin(base_url, parser.base_href)
 
     page_origin = urlsplit(page_url)[:2]
-    seen: dict[str, ResourceRef] = {}
+    seen_references: dict[str, ResourceRef] = {}
 
-    for tag, attr, raw, kind, tag_text in parser.found:
-        if not raw or raw.lower().startswith(_SKIP_SCHEMES):
+    for tag, attr, raw, kind, tag_text in parser.found_resources:
+        
+        if not raw or raw.lower().startswith(ATTRIBUTES_TO_SKIP): 
             continue
+        
         try:
             url = urldefrag(urljoin(effective_base, raw))[0]
             parts = urlsplit(url)
         except ValueError:
             logger.warning("Unparseable resource URL skipped: %r", raw)
             continue
-        if parts.scheme not in ("http", "https") or not parts.netloc:
+
+        if parts.scheme not in ("http", "https") or not parts.netloc: 
             continue
-        if cfg.same_origin_only and parts[:2] != page_origin:
+        
+        if cfg.same_origin_only and parts[:2] != page_origin: 
             continue
 
-        if url in seen:
-            ref = seen[url]
-            ref.occurrences += 1
+        if url in seen_references:
+            reference = seen_references[url]
+            reference.occurrences += 1
         else:
-            ref = seen[url] = ResourceRef(url=url, tag=tag, attr=attr, kind=kind)
-        if tag_text and tag_text not in ref.tag_texts:
-            ref.tag_texts.append(tag_text)
+            reference = seen_references[url] = ResourceRef(url=url, tag=tag, attr=attr, kind=kind)
+        
+        if tag_text and tag_text not in reference.tag_texts:
+            reference.tag_texts.append(tag_text)
 
-    return list(seen.values())
+    return list(seen_references.values())
 
 
 def _get_mime_type(res: ResourceResult) -> str:

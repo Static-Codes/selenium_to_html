@@ -52,7 +52,7 @@ class PageSnapshot:
     base_url: str # The base url from where the resource is served from.
     page_source: str # The raw page source of the active page.
     resources: list[ResourceResult] # A collection resolved resources from the raw page source.
-    elapsed: float # The seconds that have elapsed in the current operation.
+    elapsed: float # The milliseconds that have elapsed in the current capture operation.
     
     embedded_source: str | None = None # The page's rendered source code; this is set when embed_media is enabled.
     embedded_count: int = 0 # The number of tags that had their resource embedded as 'data:' URIs.

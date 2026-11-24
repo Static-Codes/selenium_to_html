@@ -161,7 +161,7 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
     """
 
     cfg = config or FetchConfig()
-    started = time.perf_counter()
+    started = time.perf_counter_ns()
 
     thread_state = await asyncio.to_thread(_get_page_state, driver, cfg)
     source: str = thread_state["source"]
@@ -170,7 +170,7 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
     base_url = browser_base or page_url
 
     refs = _extract_references(source, base_url, page_url or base_url, cfg, bool(browser_base))
-    logger.info("Discovered %d unique external resource(s) on %s", len(refs), page_url)
+    logger.info(" Discovered %d unique external resource(s) on '%s'", len(refs), page_url)
 
     # This was flagged as a false positive in multiple security audits.
 
@@ -216,7 +216,7 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
             results.append(outcome)
         
         else:
-            logger.error("Unhandled error fetching %s: %r", ref.url, outcome)
+            logger.error(" Unhandled error fetching %s: %r", ref.url, outcome)
             results.append(
                 ResourceResult(ref=ref, ok=False, attempts=[
                     FetchAttempt("internal_types", 1, False, None, None, (), repr(outcome), 0.0)
@@ -229,7 +229,7 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
     if cfg.embed_media:
         try:
             embedded_source, embedded_count = await asyncio.to_thread(_embed_media, source, results, cfg)
-            logger.info("Embedded %d media tag(s) as base64 'data:' URIs", embedded_count)
+            logger.info(" Embedded %d media tag(s) as base64 'data:' URIs", embedded_count)
         except Exception:
             logger.exception("Media embedding failed because 'embedded_source' was not set")
 
@@ -238,13 +238,13 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
         base_url=base_url,
         page_source=source,
         resources=results,
-        elapsed=time.perf_counter() - started,
+        elapsed=(time.perf_counter_ns() - started) / 1_000_000,
         embedded_source=embedded_source,
         embedded_count=embedded_count,
     )
     
     logger.info(
-        "Capture complete:\n\nResults:\n%d succeeded | %d failed | Time spent: %.2fs", 
+        " Capture complete!\n\nResults:\n%d succeeded | %d failed | Time spent: %.2fms", 
         len(snapshot.succeeded), len(snapshot.failures), snapshot.elapsed
     )
 
