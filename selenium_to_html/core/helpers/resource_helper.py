@@ -84,7 +84,7 @@ def _get_mime_type(res: ResourceResult) -> str:
     mime_type = res.content_type.split(";")[0].strip().lower()
     
     if not mime_type or mime_type == "application/octet-stream":
-        guessed_type, path = mimetypes.guess_type(
+        guessed_type, _ = mimetypes.guess_type(
             urlsplit(res.final_url or res.ref.url).path
         )
         

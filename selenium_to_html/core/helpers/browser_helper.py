@@ -298,9 +298,6 @@ def _make_http_get_request(
 
         except _AttemptError:
             raise
-
-        except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
-            raise _AttemptError(None, f"network error: {exc!r}", redirects=tuple(number_of_redirects)) from exc
             
         except ValueError as exc:
             raise _AttemptError(None, f"invalid request: {exc!r}", retryable=False) from exc
