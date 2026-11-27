@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import urllib.request
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, override
 
 from .fetch_config import FetchConfig
 
 
-class _AttemptError(Exception):
+class AttemptError(Exception):
     def __init__(
         self,
         status: int | None,
@@ -20,13 +20,13 @@ class _AttemptError(Exception):
         redirects: tuple[str, ...] = (),
     ) -> None:
         super().__init__(message)
-        self.status = status
-        self.retryable = retryable
-        self.redirects = redirects
+        self.status: int | None = status
+        self.retryable: bool = retryable
+        self.redirects: tuple[str, ...] = redirects
 
 
 @dataclass(slots=True)
-class _Fetched:
+class Response:
     status: int
     final_url: str
     body: bytes
@@ -35,18 +35,26 @@ class _Fetched:
 
 
 @dataclass(slots=True)
-class _Context:
-    driver: Any
+class Context:
+    driver: Any  # pyright: ignore[reportExplicitAny]
     cfg: FetchConfig
     page_url: str
     user_agent: str
-    cookies: list[dict[str, Any]]
-    opener: urllib.request.OpenerDirector
+    cookies: list[dict[str, Any]]  # pyright: ignore[reportExplicitAny]
+    request_opener: urllib.request.OpenerDirector
     driver_lock: asyncio.Lock
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Surface redirects as HTTPError so we can validate each hop ourselves."""
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """
+    Explicitly marks a redirect as an HTTPError.
+    This allows a redirect to be validated prior to its execution.
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D401
+    Marked as noqa: D401 so UV doesnt complain.
+    """
+
+    @override
+    
+    # noqa: D401
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # pyright: ignore[reportMissingParameterType]
         return None

@@ -12,14 +12,14 @@ import urllib.request
 from typing import Any
 
 from .helpers.browser_helper import (
-    _block_browser_fetch,
-    _build_headers,
-    _get_page_state,
-    _make_http_get_request,
+    block_browser_fetch,
+    build_headers,
+    get_page_source,
+    make_get_request,
 )
-from .helpers.resource_helper import _embed_media, _extract_references
+from .helpers.resource_helper import embed_media, extract_references
 from .types.fetch_config import FetchConfig, ResourceRef
-from .types.internal_types import _AttemptError, _Context, _Fetched, _NoRedirect
+from .types.internal_types import AttemptError, Context, Response, NoRedirect
 from .types.result_types import FetchAttempt, PageSnapshot, ResourceResult
 
 logger = logging.getLogger("selenium_to_html.runner")
@@ -32,17 +32,17 @@ _APPROACHES: tuple[str, ...] = (
 )
 
 
-async def _try_approach(approach: str, url: str, ctx: _Context) -> _Fetched:
+async def _try_approach(approach: str, url: str, ctx: Context) -> Response:
     """Attempts to fetch the resource from url in the context "ctx" using approach."""
 
     # Selenium drivers are not thread-safe, the following serializes all driver access.
     if approach == "browser_fetch":
         async with ctx.driver_lock:
-            return await asyncio.to_thread(_block_browser_fetch, ctx.driver, url, ctx.cfg)
+            return await asyncio.to_thread(block_browser_fetch, ctx.driver, url, ctx.cfg)  # pyright: ignore[reportAny]
     
     # All other requests are already thread-safe, as they are routed through urllib.request.
-    headers = _build_headers(approach, ctx, url)
-    return await asyncio.to_thread(_make_http_get_request, url, headers, ctx.cfg, ctx.opener)
+    headers = build_headers(approach, ctx, url)
+    return await asyncio.to_thread(make_get_request, url, headers, ctx.cfg, ctx.request_opener)
 
 
 def _standby_idle(cfg: FetchConfig, attempt: int) -> float:
@@ -53,7 +53,7 @@ def _standby_idle(cfg: FetchConfig, attempt: int) -> float:
     # Computes to:
     # 0.5 * 2 = 1
     # 1 ^ (N - 1) = idle_min
-    idle_floor = cfg.standby_idle_base * 2 ** (attempt - 1)
+    idle_floor: float = cfg.standby_idle_base * 2 ** (attempt - 1)  # pyright: ignore[reportAny]
     
     raise_factor = 0.5 + random.random()
     
@@ -62,12 +62,12 @@ def _standby_idle(cfg: FetchConfig, attempt: int) -> float:
         raise_factor = 1.1
 
     # Raising idle_floor by >= 1.1
-    raised_idle_floor = idle_floor * max(raise_factor, 1.1)
+    raised_idle_floor: float = idle_floor * max(raise_factor, 1.1)
 
     return min(cfg.standby_idle_max, raised_idle_floor)
 
 
-async def _fetch_resource(ref: ResourceRef, ctx: _Context, semaphore: asyncio.Semaphore) -> ResourceResult:
+async def _fetch_resource(ref: ResourceRef, ctx: Context, semaphore: asyncio.Semaphore) -> ResourceResult:
     """Using the provided context and semaphore, an asynchronous attempt is made to fetch the requested ResourceRef."""
     cfg = ctx.cfg
     result = ResourceResult(ref=ref, ok=False)
@@ -87,11 +87,11 @@ async def _fetch_resource(ref: ResourceRef, ctx: _Context, semaphore: asyncio.Se
                 except asyncio.CancelledError:
                     raise
                 
-                except _AttemptError as exc:
+                except AttemptError as exc:
                     err = exc
 
                 except Exception as exc:  # Ensuring a single failed resource fetch doesn't kill a batch operation.
-                    err = _AttemptError(None, f"unexpected error: {exc!r}", retryable=False)
+                    err = AttemptError(None, f"unexpected error: {exc!r}", retryable=False)
                 
                 # This else conditional serve as a guard clause.
                 # If an attempt to fetch the provided resource throws an exception, the following is NOT executed.
@@ -151,7 +151,10 @@ async def _fetch_resource(ref: ResourceRef, ctx: _Context, semaphore: asyncio.Se
     return result
 
 
-async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSnapshot:
+async def capture_page(
+    driver: Any,  # pyright: ignore[reportExplicitAny, reportAny]
+    config: FetchConfig | None = None
+) -> PageSnapshot: 
     """
     Asynchronously captures the rendered page source for the active tab in the provided driver.
     
@@ -163,14 +166,15 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
     cfg = config or FetchConfig()
     started = time.perf_counter_ns()
 
-    thread_state = await asyncio.to_thread(_get_page_state, driver, cfg)
-    source: str = thread_state["source"]
-    page_url: str = thread_state["page_url"]
-    browser_base: str = thread_state["browser_base"]
+    thread_state: dict[str, Any] = await asyncio.to_thread(get_page_source, driver, cfg)  # pyright: ignore[reportExplicitAny]
+    
+    source: str = thread_state["source"]  # pyright: ignore[reportAny]
+    page_url: str = thread_state["page_url"]  # pyright: ignore[reportAny]
+    browser_base: str = thread_state["browser_base"]  # pyright: ignore[reportAny]
     base_url = browser_base or page_url
 
-    refs = _extract_references(source, base_url, page_url or base_url, cfg, bool(browser_base))
-    logger.info(" Discovered %d unique external resource(s) on '%s'", len(refs), page_url)
+    references = extract_references(source, base_url, page_url or base_url, cfg, bool(browser_base))
+    logger.info(" Discovered %d unique external resource(s) on '%s'", len(references), page_url)
 
     # This was flagged as a false positive in multiple security audits.
 
@@ -190,36 +194,39 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
 
-    opener = urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=ssl_ctx))
+    request_opener = urllib.request.build_opener(
+        NoRedirect, 
+        urllib.request.HTTPSHandler(context=ssl_ctx)
+    )
 
-    ctx = _Context(
+    ctx = Context(
         driver=driver,
         cfg=cfg,
         page_url=page_url or base_url,
-        user_agent=thread_state["user_agent"],
-        cookies=thread_state["cookies"],
-        opener=opener,
+        user_agent=thread_state["user_agent"],  # pyright: ignore[reportAny]
+        cookies=thread_state["cookies"],  # pyright: ignore[reportAny]
+        request_opener=request_opener,
         driver_lock=asyncio.Lock(),
     )
 
     semaphore = asyncio.Semaphore(max(1, cfg.max_concurrency))
 
-    outcomes = await asyncio.gather(
-        *(_fetch_resource(ref, ctx, semaphore) for ref in refs),
+    responses = await asyncio.gather(
+        *(_fetch_resource(reference, ctx, semaphore) for reference in references),
         return_exceptions=True,
     )
 
     results: list[ResourceResult] = []
-    for ref, outcome in zip(refs, outcomes):
+    for reference, response in zip(references, responses):
         
-        if not isinstance(outcome, BaseException):
-            results.append(outcome)
+        if not isinstance(response, BaseException):
+            results.append(response)
         
         else:
-            logger.error(" Unhandled error fetching %s: %r", ref.url, outcome)
+            logger.error(" Unhandled error fetching %s: %r", reference.url, response)
             results.append(
-                ResourceResult(ref=ref, ok=False, attempts=[
-                    FetchAttempt("internal_types", 1, False, None, None, (), repr(outcome), 0.0)
+                ResourceResult(ref=reference, ok=False, attempts=[
+                    FetchAttempt("internal_types", 1, False, None, None, (), repr(response), 0.0)
                 ])
             )
         
@@ -228,10 +235,10 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
 
     if cfg.embed_media:
         try:
-            embedded_source, embedded_count = await asyncio.to_thread(_embed_media, source, results, cfg)
+            embedded_source, embedded_count = await asyncio.to_thread(embed_media, source, results, cfg)
             logger.info(" Embedded %d media tag(s) as base64 'data:' URIs", embedded_count)
         except Exception:
-            logger.exception("Media embedding failed because 'embedded_source' was not set")
+            logger.exception(" Media embedding failed because 'embedded_source' was not set")
 
     snapshot = PageSnapshot(
         page_url=page_url,
@@ -251,14 +258,17 @@ async def capture_page(driver: Any, config: FetchConfig | None = None) -> PageSn
     return snapshot
 
 
-def capture_page_sync(driver: Any, config: FetchConfig | None = None) -> PageSnapshot:
+def capture_page_sync(
+    driver: Any, # pyright: ignore[reportAny, reportExplicitAny]
+    config: FetchConfig | None = None
+) -> PageSnapshot:  
     """
     Synchronously captures the rendered page source for the active tab in the provided driver.
     
     Unlike capture_page (which is non-blocking), executing in a synchronous context makes this operation thread-safe.
     """
     try:
-        asyncio.get_running_loop()
+        asyncio.get_running_loop()  # pyright: ignore[reportUnusedCallResult]
     except RuntimeError:
         return asyncio.run(capture_page(driver, config))
 

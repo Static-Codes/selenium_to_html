@@ -65,7 +65,7 @@ class PageSnapshot:
     def failures(self) -> list[ResourceResult]:
         return [resource for resource in self.resources if not resource.ok]
 
-    def failure_report(self) -> list[dict[str, Any]]:
+    def failure_report(self) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
         """Generates a dictionary containing a log of the events leading up to a fatal failure."""
         return [
             {

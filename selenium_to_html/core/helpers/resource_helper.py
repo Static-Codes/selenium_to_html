@@ -11,7 +11,7 @@ import re
 from urllib.parse import urldefrag, urljoin, urlsplit
 
 from ..types.fetch_config import FetchConfig, ResourceRef
-from ..types.resource_parsing import _ResourceParser
+from ..types.resource_parsing import ResourceParser
 from ..types.result_types import ResourceResult
 
 logger = logging.getLogger("selenium_to_html.resource_helper")
@@ -23,14 +23,14 @@ ATTRIBUTES_TO_SKIP = ("data:", "javascript:", "blob:", "about:", "mailto:", "tel
 _SRC_ATTR_RE = re.compile(r"""(\ssrc\s*=\s*)("[^"]*"|'[^']*'|[^\s"'>]+)""", re.IGNORECASE)
 
 
-def _extract_references(
+def extract_references(
     html: str,
     base_url: str,
     page_url: str,
     cfg: FetchConfig,
     browser_base: bool,
 ) -> list[ResourceRef]:
-    parser = _ResourceParser(cfg.include_media or cfg.embed_media, logger=logger)
+    parser = ResourceParser(cfg.include_media or cfg.embed_media, logger=logger)
     try:
         parser.feed(html)
         parser.close()
@@ -95,7 +95,7 @@ def _res_to_data_uri(res: ResourceResult) -> str:
     return f"data:{_get_mime_type(res)};base64,{base64.b64encode(res.body).decode('ascii')}"
 
 
-def _embed_media(html: str, results: list[ResourceResult], cfg: FetchConfig) -> tuple[str, int]:
+def embed_media(html: str, results: list[ResourceResult], cfg: FetchConfig) -> tuple[str, int]:
     """
     Returns a tuple (html: str, count: int) where "html" contains the modified page source, with each resolved "src" attribute replaced with it's base64 data: URI representation.
 

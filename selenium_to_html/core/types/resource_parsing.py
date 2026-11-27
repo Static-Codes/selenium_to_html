@@ -21,7 +21,7 @@ RELATIVE_LINK_TOKENS = frozenset({
 MEDIA_TAG_TOKENS = frozenset({"image", "svg", "img", "video", "audio", "source", "track", "embed", })
 
 
-class _ResourceParser(HTMLParser):
+class ResourceParser(HTMLParser):
     def __init__(self, include_media: bool, logger: logging.Logger, debug: bool = False) -> None:
         super().__init__(convert_charrefs=True)
         
