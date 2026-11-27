@@ -7,16 +7,19 @@ from selenium.webdriver import Chrome
 
 
 async def main():
-    driver = Chrome()
+    driver: Chrome = Chrome()
     driver.get("https://google.com")
 
     # All failures are logged under "selenium_to_html.*"
     logging.basicConfig(level=logging.INFO)   
     result = await capture_page(driver, FetchConfig(include_media=True, embed_media=True))
     
+    if not result.embedded_source:
+        raise Exception("The capture failed retrieve the embedded source.") 
+
     # the raw page source can be found at result.page_source
     async with aiofiles.open("chrome-google-async.html", "w") as output:
-        await output.write(result.embedded_source)
+        await output.write(result.embedded_source)  # pyright: ignore[reportUnusedCallResult]
 
 if __name__ == "__main__":
     import asyncio

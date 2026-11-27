@@ -14,6 +14,9 @@ async def main():
     logging.basicConfig(level=logging.INFO)   
     result = await capture_page(driver, FetchConfig(include_media=True, embed_media=True))
     
+    if not result.embedded_source:
+        raise Exception("The capture failed retrieve the embedded source.") 
+
     # the raw page source can be found at result.page_source
     async with aiofiles.open("firefox-google-async.html", "w") as output:
         await output.write(result.embedded_source)
